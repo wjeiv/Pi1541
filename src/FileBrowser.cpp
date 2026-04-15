@@ -17,6 +17,7 @@
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
 #include "FileBrowser.h"
+#include "DiskVisualizer.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -1477,12 +1478,10 @@ void FileBrowser::ShowDeviceAndROM( const char* ROMName )
 void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForIcon)
 {
 #if not defined(EXPERIMENTALZERO)
-	// Ideally we should not have to load the entire disk to read the directory.
 	static const char* fileTypes[]=
 	{
 		"DEL", "SEQ", "PRG", "USR", "REL", "UKN", "UKN", "UKN"
 	};
-	// Decode the BAM
 	unsigned track = 18;
 	unsigned sectorNo = 0;
 	char name[17] = { 0 };
@@ -1495,66 +1494,39 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 	u32 textColour = palette[VIC2_COLOUR_INDEX_LBLUE];
 	u32 bgColour = palette[VIC2_COLOUR_INDEX_BLUE];
 
-	u32 usedColour = palette[VIC2_COLOUR_INDEX_RED];
-	u32 freeColour = palette[VIC2_COLOUR_INDEX_LGREEN];
-	u32 thisColour = 0;
-	u32 BAMOffsetX = screenMain->ScaleX(400);
-
-	u32 bmBAMOffsetX = screenMain->ScaleX(1024) - PNG_WIDTH;
-	u32 x_px = 0;
-	u32 y_px = 0;
-
 	ClearScreen();
 
-	if (options.DisplayTracks())
-	{
-		for (track = 0; track < HALF_TRACK_COUNT; track += 2)
-		{
-			int yoffset = screenMain->ScaleY(400);
-			unsigned index;
-			unsigned length = diskImage->TrackLength(track);
-			unsigned countSync = 0;
+	// Layout: directory listing top-left, graphical disk visualization right.
+	// The disk visualization replaces the old rectangular BAM grid with a
+	// circular floppy-disk rendering that shows track/sector usage from the BAM
+	// and highlights the active sector during emulation.
+	int screenWidth = screenMain->Width();
+	int screenHeight = screenMain->Height();
 
-			u8 shiftReg = 0;
-			for (index = 0; index < length / 8; ++index)
-			{
-				RGBA colour;
-				unsigned count1s = 0;
-				bool sync = false;
+	// Directory area: left 25% of screen
+	int dirWidth = screenWidth / 4;
+	int dirHeight = screenHeight - 40;
 
-				int bit;
+	// Disk visualization area: right 75%, with bottom margin for signal graph
+	int diskX = dirWidth;
+	int diskMarginTop = screenMain->ScaleY(8);
+	int diskMarginBottom = screenMain->ScaleY(160);
+	if (diskMarginBottom < 120) diskMarginBottom = 120;
+	int diskY = diskMarginTop;
+	int diskWidth = screenWidth - dirWidth;
+	int diskHeight = screenHeight - diskMarginTop - diskMarginBottom;
+	if (diskHeight < 80) diskHeight = 80;
 
-				for (bit = 0; bit < 64; ++bit)
-				{
-					if (bit % 8 == 0)
-						shiftReg = diskImage->GetNextByte(track, index * 8 + bit / 8);
+	int nameY = screenHeight - 40;
 
-					if (shiftReg & 0x80)
-					{
-						count1s++;
-						countSync++;
-						if (countSync == 10)
-							sync = true;
-					}
-					else
-					{
-						countSync = 0;
-					}
-					shiftReg <<= 1;
-				}
+	// Render the graphical disk visualization (full render with BAM data).
+	// The global diskVisualizer is shared with UpdateScreen() which calls
+	// UpdateHead() to animate the read head and highlight sectors in real time.
+	extern DiskVisualizer diskVisualizer;
+	diskVisualizer.RenderDisk(screenMain, diskX, diskY, diskWidth, diskHeight,
+	                          diskImage);
 
-				if (sync)
-					colour = RGBA(0xff, 0x00, 0x00, 0xFF);
-				else
-					colour = RGBA(0x00, (unsigned char)((float)count1s / 64.0f * 255.0f), 0x00, 0xFF);
-
-				screenMain->DrawRectangle(index, (track >> 1) * 4 + yoffset, index + 1, (track >> 1) * 4 + 4 + yoffset, colour);
-			}
-		}
-	}
-
-	track = 18;
-
+	// Render directory listing in top-left quadrant
 	if (diskImage->GetDecodedSector(track, sectorNo, buffer))
 	{
 		track = buffer[0];
@@ -1579,11 +1551,7 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 		int bamOffset = BAM_OFFSET;
 		int guess40 = 0;
 
-		x_px = bmBAMOffsetX;
-		int x_size = PNG_WIDTH/lastTrackUsed;
-		int y_size = PNG_HEIGHT/21;
-
-// try to guess the 40 track format
+		// try to guess the 40 track format
 		if (lastTrackUsed == 39)
 		{
 			int dolphin_sum = 0;
@@ -1597,12 +1565,7 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 				guess40 = 0xc0;
 			if ( dolphin_sum != 0 && speeddos_sum == 0)
 				guess40 = 0xac;
-
-// debugging
-//snprintf(bufferOut, 128, "LTU %d dd %d sd %d g40 %d", lastTrackUsed, dolphin_sum, speeddos_sum, guess40);
-//screenMain->PrintText(false, x_px, PNG_HEIGHT+30, bufferOut, textColour, bgColour);
 		}
-
 
 		for (bamTrack = 0; bamTrack <= lastTrackUsed; ++bamTrack)
 		{
@@ -1613,29 +1576,6 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 
 			if (bamOffset && (bamTrack + 1) != 18)
 				blocksFree += buffer[bamOffset + bamTrack * BAM_ENTRY_SIZE];
-
-			y_px = 0;
-			for (u32 bit = 0; bit < DiskImage::SectorsPerTrackD64(bamTrack); bit++)
-			{
-				u32 bits = buffer[bamOffset + 1 + (bit >> 3) + bamTrack * BAM_ENTRY_SIZE];
-
-				if (!guess40 && bamTrack>= 35)
-					thisColour = 0;
-				else if (bits & (1 << (bit & 0x7)))
-					thisColour = freeColour;
-				else
-					thisColour = usedColour;
-
-// highight track 18
-				if ((bamTrack + 1) == 18)
-					screenMain->DrawRectangle(x_px, y_px, x_px+x_size, y_px+y_size, textColour);
-
-				screenMain->DrawRectangle(x_px+1, y_px+1, x_px+x_size-1, y_px+y_size-1, thisColour);
-
-				y_px += y_size;
-				bits <<= 1;
-			}
-			x_px += x_size;
 		}
 
 		x = 0;
@@ -1654,7 +1594,7 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 			unsigned sectorPrev = 0xff;
 			bool complete = false;
 			// Blocks 1 through 19 on track 18 contain the file entries. The first two bytes of a block point to the next directory block with file entries. If no more directory blocks follow, these bytes contain $00 and $FF, respectively.
-			while (!complete)
+			while (!complete && y < dirHeight - fontHeight * 2)
 			{
 				//DEBUG_LOG("track %d sector %d\r\n", track, sectorNo);
 				if (diskImage->GetDecodedSector(track, sectorNo, buffer))
@@ -1673,7 +1613,7 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 
 					int entry;
 					int entryOffset = 2;
-					for (entry = 0; entry < 8; ++entry)
+					for (entry = 0; entry < 8 && y < dirHeight - fontHeight * 2; ++entry)
 					{
 						bool done = true;
 						for (int i = 0; i < 0x1d; ++i)
@@ -1729,6 +1669,14 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 		snprintf(bufferOut, 128, "%d BLOCKS FREE.\r\n", blocksFree);
 		screenMain->PrintText(true, x, y, bufferOut, textColour, bgColour);
 		y += fontHeight;
+	}
+
+	// Display disk name at bottom-left
+	x = 0;
+	y = nameY;
+	if (diskImage->GetName()) {
+		snprintf(bufferOut, 128, "DISK: %s", diskImage->GetName());
+		screenMain->PrintText(true, x, y, bufferOut, palette[VIC2_COLOUR_INDEX_WHITE], bgColour);
 	}
 
 	DisplayStatusBar();

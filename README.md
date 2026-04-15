@@ -42,3 +42,26 @@ This will build kernel.img
 
 
 In order to build the Commodore programs from the `CBM-FileBrowser_v1.6/sources/` directory, you'll need to install the ACME cross assembler, which is available at https://github.com/meonwax/acme/
+
+Disk Visualization
+------------------
+
+The disk info screen now displays a graphical floppy disk visualization that
+shows real-time drive activity. When a D64 disk image is loaded, the old
+rectangular BAM grid is replaced with a circular disk rendering:
+
+- **Track/sector layout**: Concentric rings represent tracks (outermost = track 1). Each ring is divided into sectors based on the D64 zone layout (21/19/18/17 sectors per track).
+- **BAM coloring**: Sectors are colored based on the Block Availability Map — green for allocated (has data), black for free, and cyan for directory track 18.
+- **Active sector highlighting**: When the drive LED is on (indicating a read/write), the sector currently under the head is highlighted in red.
+- **Read head**: A small carriage on the south side of the disk moves vertically to track the current head position. The current track number is displayed inside the head.
+- **Signal graph**: The existing IEC bus signal graph (ATN, DATA, CLOCK) continues to render across the bottom of the screen below the disk.
+
+The visualization uses integer-only math (`int_sqrt`, `int_atan2`) to avoid
+floating-point dependencies on the bare-metal Raspberry Pi kernel.
+
+### Files
+
+- `src/DiskVisualizer.h` — Class interface and color constants
+- `src/DiskVisualizer.cpp` — Rendering engine (full disk render + lightweight head updates)
+- `src/FileBrowser.cpp` — Layout integration in `DisplayDiskInfo()`
+- `src/main.cpp` — Real-time `UpdateHead()` hook in `UpdateScreen()`

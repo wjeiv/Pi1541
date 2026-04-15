@@ -43,6 +43,7 @@ extern "C"
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
 #include "SpinLock.h"
+#include "DiskVisualizer.h"
 
 #include "logo.h"
 #include "sample.h"
@@ -75,13 +76,6 @@ static const u8 snoopBackCommand[] = {
 static int snoopIndex = 0;
 static int snoopPC = 0;
 
-enum EmulatingMode
-{
-	IEC_COMMANDS,
-	EMULATING_1541,
-	EMULATING_1581
-};
-
 volatile EmulatingMode emulating;
 
 typedef void(*func_ptr)();
@@ -107,6 +101,7 @@ Pi1581 pi1581;
 #endif
 CEMMCDevice	m_EMMC;
 Screen screen;
+DiskVisualizer diskVisualizer;
 ScreenLCD* screenLCD = 0;
 Options options;
 const char* fileBrowserSelectedName;
@@ -569,6 +564,14 @@ void UpdateScreen()
 		if (emulating == EMULATING_1541)
 		{
 			track = pi1541.drive.Track();
+
+			// Update disk visualizer head in real-time (it tracks its own state internally)
+			if (diskVisualizer.IsInitialized())
+			{
+				unsigned int headOffset = pi1541.drive.GetHeadBitOffset();
+				diskVisualizer.UpdateHead(&screen, track, headOffset, led);
+			}
+
 			if (track != oldTrack)
 			{
 				oldTrack = track;

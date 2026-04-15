@@ -28,8 +28,8 @@ extern "C"
 
 extern u8 deviceID;
 
-static const u32 screenPosXCaddySelections = 240;
-static const u32 screenPosYCaddySelections = 280;
+static const u32 screenPosXCaddySelections = 0;
+static const u32 screenPosYCaddySelections = 40 * 16 + 10 - 60;
 static char buffer[256] = { 0 };
 static u32 white = RGBA(0xff, 0xff, 0xff, 0xff);
 static u32 red = RGBA(0xff, 0, 0, 0xff);
