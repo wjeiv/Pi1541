@@ -121,7 +121,7 @@ bool TextParser::ParseComment()
 
 Options::Options(void)
 	: TextParser()
-	, deviceID(8)
+	, deviceID(9)
 	, onResetChangeToStartingFolder(0)
 	, extraRAM(0)
 	, RAMBOard(0)

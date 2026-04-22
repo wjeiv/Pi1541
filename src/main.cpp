@@ -105,7 +105,7 @@ DiskVisualizer diskVisualizer;
 ScreenLCD* screenLCD = 0;
 Options options;
 const char* fileBrowserSelectedName;
-u8 deviceID = 8;
+u8 deviceID = 9;
 IEC_Commands m_IEC_Commands;
 InputMappings* inputMappings;
 #if not defined(EXPERIMENTALZERO)

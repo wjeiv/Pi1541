@@ -3,7 +3,7 @@
 
 
 // If you would like to change the drive number then specify it here (8 is the default)
-//deviceID = 9
+deviceID = 9
 
 // If you are using the split line hardware option (ie Option B) then you need to specify this option
 //splitIECLines = 1

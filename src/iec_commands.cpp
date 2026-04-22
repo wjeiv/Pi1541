@@ -215,7 +215,6 @@ void IEC_Commands::Channel::Close()
 
 IEC_Commands::IEC_Commands()
 {
-	deviceID = 8;
 	usingVIC20 = false;
 	autoBootFB128 = false;
 	Reset();
